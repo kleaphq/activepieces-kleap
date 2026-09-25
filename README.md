@@ -9,7 +9,7 @@ It covers the whole Kleap MCP surface plus the app database and domain checkout,
 
 ## Authentication
 
-API key (`PieceAuth.SecretText`). Create it on kleap.co → **Settings → API key** with the **Full** preset.
+API key (`PieceAuth.SecretText`). Create it on kleap.co → **https://kleap.co/settings/api-key** with the **Full** preset.
 The connection is validated with `GET /account/credits`.
 
 Keys created before the database and domain-checkout scopes existed get

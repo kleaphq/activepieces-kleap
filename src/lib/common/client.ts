@@ -41,7 +41,7 @@ interface KleapErrorBody {
 
 const HINTS: Record<string, string> = {
   INSUFFICIENT_SCOPE:
-    'Create a new API key with the Full preset on kleap.co → Settings → API key, then update this connection.',
+    'Create a new API key with the Full preset on https://kleap.co/settings/api-key, then update this connection.',
   DATABASE_NOT_PROVISIONED:
     'This app has no Kleap Database yet. Use "Edit App With AI" with a message like "add a database", then try again.',
   INSUFFICIENT_CREDITS: 'Top up your Kleap credits on kleap.co, then try again.',
