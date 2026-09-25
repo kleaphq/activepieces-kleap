@@ -45,7 +45,9 @@ Behaviour worth knowing:
 - **Buy Domain does not charge anyone.** It calls `POST /domains/checkout` and returns a Stripe `checkout_url`.
   The domain is registered only after someone pays on that link. Send the link to the payer, then follow
   the domain with **Check Domain**.
-- **Database**: an app without a database answers `DATABASE_NOT_PROVISIONED`. Add one by asking the AI to
+- **Database**: Run SQL needs the `database:write` scope even for a SELECT, and results are capped at 500 rows /
+  5 MB (`truncated: true`). EXPLAIN, SHOW, COPY and CALL are refused with `UNSUPPORTED_STATEMENT`.
+  An app without a database answers `DATABASE_NOT_PROVISIONED`. Add one by asking the AI to
   "add a database" with **Edit App With AI**. Update Rows and Delete Rows refuse an empty `Where`.
 - **Errors**: every error is shown as `CODE: message`, followed by the details and the request id. When the API
   answers `429 RATE_LIMITED` (30 requests per minute on the standard tier), the step waits `retry_after` and
@@ -78,6 +80,9 @@ npm test               # offline: every action and trigger against nock mocks
 npm run metadata       # loads dist/ through the framework and prints piece.metadata()
 KLEAP_TEST_KEY_FILE=/path/to/key npm run test:live                      # read-only, no credits
 KLEAP_TEST_KEY_FILE=/path/to/key KLEAP_LIVE_BUILD=1 npm run test:live   # + creates ONE app and publishes it
+KLEAP_TEST_KEY_FILE=/path/to/key KLEAP_DB_APP_ID=104139 KLEAP_DB_TABLE=n8n_e2e_leads npm run test:live-db
+#   database actions + New Database Row trigger on rows it inserts itself;
+#   add KLEAP_CHECKOUT_DOMAIN=<domain> to create ONE Stripe checkout session (never paid)
 ```
 
 The source only imports `@activepieces/pieces-framework` and `@activepieces/pieces-common`, never

@@ -45,6 +45,9 @@ const HINTS: Record<string, string> = {
   DATABASE_NOT_PROVISIONED:
     'This app has no Kleap Database yet. Use "Edit App With AI" with a message like "add a database", then try again.',
   INSUFFICIENT_CREDITS: 'Top up your Kleap credits on kleap.co, then try again.',
+  // The API message already lists what Run SQL accepts; only point to the fallback.
+  UNSUPPORTED_STATEMENT: 'The row actions (Find / Insert / Update / Delete Rows) remain available.',
+  RLS_REQUIRED: 'Enable row level security on the new public table (ALTER TABLE … ENABLE ROW LEVEL SECURITY) in the same SQL.',
 };
 
 function parseBody(body: unknown): KleapErrorBody | undefined {

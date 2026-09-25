@@ -56,7 +56,8 @@ export const tableDropdown = () =>
           disabled: false,
           placeholder: tables.length ? 'Select a table' : 'This database has no table yet',
           options: tables.map((t) => ({
-            label: `${t['name']}${t['row_count'] !== undefined ? ` (${t['row_count']} rows)` : ''}`,
+            // row_count is a Postgres planner estimate, null for a table never analysed.
+            label: `${t['name']}${t['row_count'] != null ? ` (~${t['row_count']} rows)` : ''}`,
             value: String(t['name']),
           })),
         };

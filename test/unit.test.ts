@@ -257,7 +257,7 @@ describe('database', () => {
     assert.deepEqual(await runAction('get_database_schema', KEY, { app_id: '42' }), schema);
     api().get(`${V1}/apps/42/database`).reply(200, schema);
     const opts = await dropdownOptions('find_rows', 'table', KEY, { app_id: '42' });
-    assert.deepEqual(opts.options, [{ label: 'leads (3 rows)', value: 'leads' }]);
+    assert.deepEqual(opts.options, [{ label: 'leads (~3 rows)', value: 'leads' }]);
     api().get(`${V1}/apps/43/database`).reply(409, err('DATABASE_NOT_PROVISIONED', 'No database'));
     const none = await dropdownOptions('find_rows', 'table', KEY, { app_id: '43' });
     assert.equal(none.disabled, true);

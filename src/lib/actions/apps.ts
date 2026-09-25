@@ -105,7 +105,8 @@ export const getPublishStatus = createAction({
   auth: kleapAuth,
   name: 'get_publish_status',
   displayName: 'Get Publish Status',
-  description: 'Returns published / running / queued / not_published, plus the production URL and quality report once live.',
+  description:
+    'Returns published / deploying / running / queued / not_published, plus the production URL and quality report once live.',
   props: {
     app_id: appDropdown(),
     deploy_key: Property.ShortText({

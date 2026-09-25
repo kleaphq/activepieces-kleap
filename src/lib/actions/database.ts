@@ -33,7 +33,8 @@ export const findRows = createAction({
   auth: kleapAuth,
   name: 'find_rows',
   displayName: 'Find Rows',
-  description: 'Reads rows from a table, with optional equality filters, sorting and pagination.',
+  description:
+    'Reads rows from a table, with optional equality filters, sorting and pagination. At most 5 MB per call: check has_more / truncated and page with Offset.',
   props: {
     app_id: appDropdown(),
     table: tableDropdown(),
@@ -144,7 +145,7 @@ export const runSql = createAction({
   name: 'run_sql',
   displayName: 'Run SQL',
   description:
-    'Runs one SQL statement on the app\'s Postgres database. A single SELECT needs read access; anything else needs write access. Use $1, $2… placeholders with Parameters.',
+    'Runs SQL on the app\'s Postgres database with owner rights (needs the database:write scope, even for a SELECT). Accepts a query, INSERT/UPDATE/DELETE/MERGE or DDL; not EXPLAIN, SHOW, COPY or CALL. Results are capped at 500 rows / 5 MB (truncated: true). Use $1, $2… placeholders with Parameters.',
   props: {
     app_id: appDropdown(),
     sql: Property.LongText({
