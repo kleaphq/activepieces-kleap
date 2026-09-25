@@ -247,15 +247,29 @@ describe('domains', () => {
 
 describe('database', () => {
   const rowsPath = `${V1}/apps/42/database/tables/leads/rows`;
+  const schema = {
+    provisioned: true,
+    tables: [
+      {
+        name: 'leads',
+        row_count: 3,
+        columns: [
+          { name: 'id', type: 'bigint', nullable: false, default: "nextval('leads_id_seq'::regclass)", primary_key: true },
+          { name: 'email', type: 'text', nullable: false, default: null, primary_key: false },
+          { name: 'status', type: 'text', nullable: true, default: "'new'::text", primary_key: false },
+          { name: 'score', type: 'integer', nullable: true, default: null, primary_key: false },
+          { name: 'vip', type: 'boolean', nullable: true, default: null, primary_key: false },
+          { name: 'created_at', type: 'timestamp with time zone', nullable: true, default: 'now()', primary_key: false },
+        ],
+      },
+    ],
+  };
+  const schemaMock = (times = 1) => api().get(`${V1}/apps/42/database`).times(times).reply(200, schema);
 
   it('schema + table dropdown', async () => {
-    const schema = {
-      provisioned: true,
-      tables: [{ name: 'leads', row_count: 3, columns: [{ name: 'id', type: 'integer', nullable: false, default: null, primary_key: true }] }],
-    };
-    api().get(`${V1}/apps/42/database`).reply(200, schema);
+    schemaMock();
     assert.deepEqual(await runAction('get_database_schema', KEY, { app_id: '42' }), schema);
-    api().get(`${V1}/apps/42/database`).reply(200, schema);
+    schemaMock();
     const opts = await dropdownOptions('find_rows', 'table', KEY, { app_id: '42' });
     assert.deepEqual(opts.options, [{ label: 'leads (~3 rows)', value: 'leads' }]);
     api().get(`${V1}/apps/43/database`).reply(409, err('DATABASE_NOT_PROVISIONED', 'No database'));
@@ -264,15 +278,42 @@ describe('database', () => {
     assert.match(none.placeholder, /add a database/);
   });
 
-  it('find rows sends where as JSON, order and pagination', async () => {
+  it('no raw JSON needed: one typed field per column, column dropdowns', async () => {
+    schemaMock();
+    const prop = (piece.getAction('insert_rows') as any).props.values;
+    const fields = await prop.props({ auth: { secret_text: KEY }, app_id: '42', table: 'leads' }, {});
+    assert.deepEqual(Object.keys(fields), ['id', 'email', 'status', 'score', 'vip', 'created_at']);
+    assert.equal(fields.email.type, 'SHORT_TEXT');
+    assert.equal(fields.email.required, true, 'NOT NULL without default');
+    assert.equal(fields.id.required, false, 'has a default');
+    assert.equal(fields.score.type, 'NUMBER');
+    assert.equal(fields.vip.type, 'STATIC_DROPDOWN');
+    assert.equal(fields.created_at.type, 'DATE_TIME');
+    schemaMock();
+    const cols = await dropdownOptions('delete_rows', 'where_column', KEY, { app_id: '42', table: 'leads' });
+    assert.equal(cols.options[0].value, 'id');
+    // Every database action/trigger input is a plain field; JSON only appears as an optional "Advanced" extra.
+    for (const name of ['find_rows', 'insert_rows', 'update_rows', 'delete_rows', 'run_sql']) {
+      for (const [key, p] of Object.entries((piece.getAction(name) as any).props)) {
+        if ((p as any).type === 'JSON') assert.ok(!(p as any).required && /Advanced/.test((p as any).displayName), `${name}.${key}`);
+      }
+    }
+    for (const [key, p] of Object.entries((piece.getTrigger('new_database_row') as any).props)) {
+      assert.notEqual((p as any).type, 'JSON', key);
+    }
+  });
+
+  it('find rows: column + value filter, order and pagination', async () => {
+    schemaMock();
     api()
       .get(rowsPath)
-      .query({ limit: '10', offset: '20', order_by: 'created_at', order: 'asc', where: '{"status":"new"}' })
+      .query({ limit: '10', offset: '20', order_by: 'created_at', order: 'asc', where: '{"score":5}' })
       .reply(200, { table: 'leads', rows: [{ id: 1 }], limit: 10, offset: 20, has_more: false });
     const out = await runAction('find_rows', KEY, {
       app_id: '42',
       table: 'leads',
-      where: { status: 'new' },
+      where_column: 'score',
+      where_value: '5',
       order_by: 'created_at',
       order: 'asc',
       limit: 10,
@@ -281,38 +322,57 @@ describe('database', () => {
     assert.equal(out.rows.length, 1);
   });
 
-  it('insert accepts one object or an array', async () => {
+  it('insert: one field per column, typed; advanced rows are added', async () => {
     let body: any;
+    schemaMock();
     api().post(rowsPath, (b) => ((body = b), true)).reply(201, { table: 'leads', inserted: 1, rows: [{ id: 9 }] });
-    await runAction('insert_rows', KEY, { app_id: '42', table: 'leads', rows: { name: 'Ada' } });
-    assert.deepEqual(body, { rows: [{ name: 'Ada' }] });
+    await runAction('insert_rows', KEY, {
+      app_id: '42',
+      table: 'leads',
+      values: { email: 'ada@example.com', status: '', score: '7', vip: 'true', id: undefined },
+    });
+    assert.deepEqual(body, { rows: [{ email: 'ada@example.com', score: 7, vip: true }] });
+    schemaMock();
     api().post(rowsPath, (b) => ((body = b), true)).reply(201, { table: 'leads', inserted: 2, rows: [] });
-    await runAction('insert_rows', KEY, { app_id: '42', table: 'leads', rows: '[{"name":"A"},{"name":"B"}]' });
-    assert.equal(body.rows.length, 2);
+    await runAction('insert_rows', KEY, { app_id: '42', table: 'leads', values: { email: 'a@b.co' }, rows_advanced: '[{"email":"c@d.co"}]' });
+    assert.deepEqual(body.rows, [{ email: 'a@b.co' }, { email: 'c@d.co' }]);
+    schemaMock();
+    await assert.rejects(runAction('insert_rows', KEY, { app_id: '42', table: 'leads', values: {} }), /at least one column/);
   });
 
-  it('update and delete refuse an empty where before calling the API', async () => {
-    await assert.rejects(runAction('update_rows', KEY, { app_id: '42', table: 'leads', where: {}, set: { a: 1 } }), /non-empty/);
-    await assert.rejects(runAction('delete_rows', KEY, { app_id: '42', table: 'leads', where: undefined }), /non-empty/);
+  it('update and delete: match column + value, refuse an empty condition', async () => {
+    schemaMock(2);
+    await assert.rejects(runAction('update_rows', KEY, { app_id: '42', table: 'leads', values: { status: 'x' } }), /Match Column/);
+    await assert.rejects(runAction('delete_rows', KEY, { app_id: '42', table: 'leads' }), /Match Column/);
     let body: any;
+    schemaMock();
     api().patch(rowsPath, (b) => ((body = b), true)).reply(200, { table: 'leads', updated: 1, rows: [] });
-    await runAction('update_rows', KEY, { app_id: '42', table: 'leads', where: { id: 1 }, set: { status: 'done' } });
+    await runAction('update_rows', KEY, { app_id: '42', table: 'leads', where_column: 'id', where_value: '1', values: { status: 'done', score: '' } });
     assert.deepEqual(body, { where: { id: 1 }, set: { status: 'done' } });
+    schemaMock();
     api().delete(rowsPath, (b) => ((body = b), true)).reply(200, { table: 'leads', deleted: 1 });
-    const del = await runAction('delete_rows', KEY, { app_id: '42', table: 'leads', where: '{"id":1}' });
-    assert.deepEqual(body, { where: { id: 1 } });
+    const del = await runAction('delete_rows', KEY, {
+      app_id: '42',
+      table: 'leads',
+      where_column: 'email',
+      where_value: 'a@b.co',
+      where_advanced: { status: 'new' },
+    });
+    assert.deepEqual(body, { where: { email: 'a@b.co', status: 'new' } });
     assert.equal(del.deleted, 1);
   });
 
-  it('run sql passes params and surfaces RLS_REQUIRED', async () => {
+  it('run sql: parameters are a simple list; errors surfaced', async () => {
     let body: any;
     api()
       .post(`${V1}/apps/42/database/query`, (b) => ((body = b), true))
       .reply(200, { command: 'SELECT', row_count: 1, rows: [{ n: 1 }] });
-    await runAction('run_sql', KEY, { app_id: '42', sql: 'select $1::int as n', params: [1] });
-    assert.deepEqual(body, { sql: 'select $1::int as n', params: [1] });
+    await runAction('run_sql', KEY, { app_id: '42', sql: 'select $1::int as n', params: ['1'] });
+    assert.deepEqual(body, { sql: 'select $1::int as n', params: ['1'] });
     api().post(`${V1}/apps/42/database/query`).reply(422, err('RLS_REQUIRED', 'Enable RLS on public.t'));
-    await assert.rejects(runAction('run_sql', KEY, { app_id: '42', sql: 'create table t(id int)' }), /^Error: RLS_REQUIRED|RLS_REQUIRED: Enable RLS/);
+    await assert.rejects(runAction('run_sql', KEY, { app_id: '42', sql: 'create table t(id int)' }), /RLS_REQUIRED: Enable RLS/);
+    api().post(`${V1}/apps/42/database/query`).reply(400, err('UNSUPPORTED_STATEMENT', 'EXPLAIN is not available'));
+    await assert.rejects(runAction('run_sql', KEY, { app_id: '42', sql: 'explain select 1' }), /UNSUPPORTED_STATEMENT: .*row actions/);
   });
 });
 
@@ -362,7 +422,7 @@ describe('triggers', () => {
   it('New Database Row: sorts by created_at desc and dedupes on id', async () => {
     const t = trigger('new_database_row');
     const store = memoryStore();
-    const ctx = makeContext(KEY, { app_id: '42', table: 'leads', order_by: 'created_at', id_column: 'id' }, store);
+    const ctx = makeContext(KEY, { app_id: '42', table: 'leads' }, store);
     const q = { order_by: 'created_at', order: 'desc', limit: '100' };
     api().get(`${V1}/apps/42/database/tables/leads/rows`).query(q).reply(200, { rows: [{ id: 10 }, { id: 9 }] });
     await t.onEnable(ctx);

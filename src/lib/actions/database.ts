@@ -3,18 +3,10 @@ import { createAction, Property } from '@activepieces/pieces-framework';
 import { kleapAuth } from '../auth';
 import { JsonObject, kleapRequest, parseJsonInput, requireWhere, resolveAppId } from '../common/client';
 import { appDropdown, tableDropdown } from '../common/props';
+import { buildWhere, collectValues, columnDropdown, columnValuesProp, fetchColumns, whereProps } from '../common/db-props';
 
 const tablePath = (appId: string, table: string) =>
   `/apps/${appId}/database/tables/${encodeURIComponent(String(table).trim())}/rows`;
-
-const whereProp = (required: boolean) =>
-  Property.Json({
-    displayName: 'Where',
-    description: required
-      ? 'Column equalities that select the rows, e.g. {"id": 42} or {"status": "new"}. Required and non-empty.'
-      : 'Optional column equalities, e.g. {"status": "new"}.',
-    required,
-  });
 
 export const getDatabaseSchema = createAction({
   auth: kleapAuth,
@@ -34,20 +26,20 @@ export const findRows = createAction({
   name: 'find_rows',
   displayName: 'Find Rows',
   description:
-    'Reads rows from a table, with optional equality filters, sorting and pagination. At most 5 MB per call: check has_more / truncated and page with Offset.',
+    'Reads rows from a table, optionally only those where a column equals a value, sorted and paginated. At most 5 MB per call: check has_more / truncated and page with Offset.',
   props: {
     app_id: appDropdown(),
     table: tableDropdown(),
-    where: whereProp(false),
-    order_by: Property.ShortText({ displayName: 'Order By', description: 'Column name, e.g. created_at.', required: false }),
+    ...whereProps(false),
+    order_by: columnDropdown({ displayName: 'Sort By', description: 'Optional column to sort on, e.g. created_at.' }),
     order: Property.StaticDropdown({
       displayName: 'Order',
       required: false,
       defaultValue: 'desc',
       options: {
         options: [
-          { label: 'Descending', value: 'desc' },
-          { label: 'Ascending', value: 'asc' },
+          { label: 'Newest / largest first', value: 'desc' },
+          { label: 'Oldest / smallest first', value: 'asc' },
         ],
       },
     }),
@@ -57,14 +49,17 @@ export const findRows = createAction({
   async run(context) {
     const p = context.propsValue;
     const appId = await resolveAppId(context.auth, p.app_id);
-    const where = parseJsonInput<JsonObject>(p.where, 'Where');
+    const needsColumns = !!p.where_column;
+    const columns = needsColumns ? await fetchColumns(context.auth, appId, p.table) : [];
+    const where = buildWhere(p, columns);
+    const orderBy = typeof p.order_by === 'string' ? p.order_by.trim() : '';
     return kleapRequest(context.auth, HttpMethod.GET, tablePath(appId, p.table), {
       query: {
         limit: Math.min(500, Math.max(1, Number(p.limit ?? 100))),
         offset: Number(p.offset ?? 0) || undefined,
-        order_by: p.order_by?.trim() || undefined,
-        order: p.order_by?.trim() ? p.order || 'desc' : undefined,
-        where: where && Object.keys(where).length ? JSON.stringify(where) : undefined,
+        order_by: orderBy || undefined,
+        order: orderBy ? p.order || 'desc' : undefined,
+        where: Object.keys(where).length ? JSON.stringify(where) : undefined,
       },
     });
   },
@@ -73,23 +68,28 @@ export const findRows = createAction({
 export const insertRows = createAction({
   auth: kleapAuth,
   name: 'insert_rows',
-  displayName: 'Insert Rows',
-  description: 'Inserts one row (a JSON object) or several (a JSON array, 500 max). Returns the inserted rows.',
+  displayName: 'Insert Row',
+  description: 'Adds a row to a table: one field per column. Returns the inserted row (with its id).',
   props: {
     app_id: appDropdown(),
     table: tableDropdown(),
-    rows: Property.Json({
-      displayName: 'Rows',
-      description: 'A JSON object for one row, or an array of objects, e.g. [{"name": "Ada", "email": "ada@example.com"}]',
-      required: true,
+    values: columnValuesProp('insert'),
+    rows_advanced: Property.Json({
+      displayName: 'More Rows (Advanced, Optional)',
+      description: 'Only to insert several rows at once: a JSON array of objects, e.g. [{"email": "a@b.co"}]. 500 max.',
+      required: false,
     }),
   },
   async run(context) {
     const p = context.propsValue;
     const appId = await resolveAppId(context.auth, p.app_id);
-    const parsed = parseJsonInput<JsonObject | JsonObject[]>(p.rows, 'Rows');
-    const rows = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
-    if (!rows.length) throw new Error('Give at least one row.');
+    const columns = await fetchColumns(context.auth, appId, p.table);
+    const rows: JsonObject[] = [];
+    const row = collectValues(p.values, columns);
+    if (Object.keys(row).length) rows.push(row);
+    const extra = parseJsonInput<JsonObject | JsonObject[]>(p.rows_advanced, 'More Rows');
+    if (extra) rows.push(...(Array.isArray(extra) ? extra : [extra]));
+    if (!rows.length) throw new Error('Fill at least one column.');
     if (rows.length > 500) throw new Error(`At most 500 rows per call (got ${rows.length}).`);
     return kleapRequest(context.auth, HttpMethod.POST, tablePath(appId, p.table), { body: { rows } });
   },
@@ -99,25 +99,20 @@ export const updateRows = createAction({
   auth: kleapAuth,
   name: 'update_rows',
   displayName: 'Update Rows',
-  description: 'Updates the rows matching "Where" with the values in "Set". Returns the updated rows.',
+  description: 'Changes the rows where a column equals a value (e.g. id = 42). Fill only the columns to change.',
   props: {
     app_id: appDropdown(),
     table: tableDropdown(),
-    where: whereProp(true),
-    set: Property.Json({
-      displayName: 'Set',
-      description: 'Columns to change, e.g. {"status": "contacted"}',
-      required: true,
-    }),
+    ...whereProps(true),
+    values: columnValuesProp('set'),
   },
   async run(context) {
     const p = context.propsValue;
     const appId = await resolveAppId(context.auth, p.app_id);
-    const where = requireWhere(p.where);
-    const set = parseJsonInput<JsonObject>(p.set, 'Set');
-    if (!set || typeof set !== 'object' || Array.isArray(set) || !Object.keys(set).length) {
-      throw new Error('"Set" must be a non-empty JSON object, e.g. {"status": "contacted"}.');
-    }
+    const columns = await fetchColumns(context.auth, appId, p.table);
+    const where = requireWhere(buildWhere(p, columns));
+    const set = collectValues(p.values, columns);
+    if (!Object.keys(set).length) throw new Error('Fill at least one column to change in "New Values".');
     return kleapRequest(context.auth, HttpMethod.PATCH, tablePath(appId, p.table), { body: { where, set } });
   },
 });
@@ -126,16 +121,17 @@ export const deleteRows = createAction({
   auth: kleapAuth,
   name: 'delete_rows',
   displayName: 'Delete Rows',
-  description: 'Deletes the rows matching "Where" (required, non-empty). Returns how many were deleted.',
+  description: 'Deletes the rows where a column equals a value (e.g. id = 42). Returns how many were deleted.',
   props: {
     app_id: appDropdown(),
     table: tableDropdown(),
-    where: whereProp(true),
+    ...whereProps(true),
   },
   async run(context) {
     const p = context.propsValue;
     const appId = await resolveAppId(context.auth, p.app_id);
-    const where = requireWhere(p.where);
+    const columns = await fetchColumns(context.auth, appId, p.table);
+    const where = requireWhere(buildWhere(p, columns));
     return kleapRequest(context.auth, HttpMethod.DELETE, tablePath(appId, p.table), { body: { where } });
   },
 });
@@ -153,9 +149,9 @@ export const runSql = createAction({
       description: 'e.g. SELECT * FROM leads WHERE status = $1 ORDER BY created_at DESC LIMIT 20',
       required: true,
     }),
-    params: Property.Json({
+    params: Property.Array({
       displayName: 'Parameters',
-      description: 'Optional JSON array of values for $1, $2…, e.g. ["new"]',
+      description: 'Optional values for $1, $2… in order (one value per line).',
       required: false,
     }),
   },
@@ -164,8 +160,8 @@ export const runSql = createAction({
     const appId = await resolveAppId(context.auth, p.app_id);
     const sql = (p.sql ?? '').trim();
     if (!sql) throw new Error('The SQL is empty.');
-    const params = parseJsonInput<unknown[]>(p.params, 'Parameters');
-    if (params !== undefined && !Array.isArray(params)) throw new Error('Parameters must be a JSON array, e.g. ["new", 42].');
+    const params = Array.isArray(p.params) ? p.params : parseJsonInput<unknown>(p.params, 'Parameters');
+    if (params !== undefined && !Array.isArray(params)) throw new Error('Parameters must be a list of values.');
     const body: JsonObject = { sql };
     if (params?.length) body['params'] = params;
     return kleapRequest(context.auth, HttpMethod.POST, `/apps/${appId}/database/query`, { body, timeoutMs: 120_000 });

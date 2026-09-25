@@ -30,7 +30,9 @@ Keys created before the database and domain-checkout scopes existed get
 - **Files**: List Files, Read Files, Write File (text or binary `ApFile`, sent base64), Edit File, Delete Files
 - **Leads and insights**: List Form Submissions, Get Analytics, Get Search Console, Connect Search Console, Get Credits
 - **Domains**: Search Domains, Check Domain, Connect Domain, Buy Domain
-- **Database**: Get Database Schema, Find Rows, Insert Rows, Update Rows, Delete Rows, Run SQL
+- **Database**: Get Database Schema, Find Rows, Insert Row, Update Rows, Delete Rows, Run SQL. No JSON to write:
+  one typed field per column (read from the table), conditions as a column dropdown + value, SQL parameters as
+  a simple list. An optional "Advanced" JSON field exists only for several rows / several conditions at once.
 - **Custom API Call** (`createCustomApiCallAction`, base URL `https://kleap.co/api/v1`, bearer injected)
 
 Behaviour worth knowing:
@@ -48,7 +50,7 @@ Behaviour worth knowing:
 - **Database**: Run SQL needs the `database:write` scope even for a SELECT, and results are capped at 500 rows /
   5 MB (`truncated: true`). EXPLAIN, SHOW, COPY and CALL are refused with `UNSUPPORTED_STATEMENT`.
   An app without a database answers `DATABASE_NOT_PROVISIONED`. Add one by asking the AI to
-  "add a database" with **Edit App With AI**. Update Rows and Delete Rows refuse an empty `Where`.
+  "add a database" with **Edit App With AI**. Update Rows and Delete Rows refuse to run without a match column and value.
 - **Errors**: every error is shown as `CODE: message`, followed by the details and the request id. When the API
   answers `429 RATE_LIMITED` (30 requests per minute on the standard tier), the step waits `retry_after` and
   retries, at most twice.
@@ -135,6 +137,18 @@ Install it on your instance:
 
 The framework sets the minimum supported Activepieces release. With framework 0.32.0 it is 0.82.0, so use
 Activepieces 0.82 or later.
+
+## Verified on a real self-hosted Activepieces (0.92.0)
+
+`@kleap/piece-kleap@0.1.1` was installed as an archive (`POST /api/v1/pieces`, `packageType=ARCHIVE`). The
+Kleap connection was created and validated through `POST /api/v1/app-connections` (`SECRET_TEXT`). The app,
+table and column dropdowns and the per-column fields all loaded through `POST /api/v1/pieces/options`. A published
+flow (**New Form Submission** → **Insert Row**) picked up a real visitor lead on its 5-minute poll and inserted
+it into the app database, and the run SUCCEEDED.
+
+When you build a flow through the REST API instead of the UI, reference a previous step as
+`{{trigger.output.email}}`. Since Activepieces 0.9x a step view is `{output, error}`, and the older
+`{{trigger.email}}` resolves to an empty string. The builder UI inserts the right form for you.
 
 ## License
 

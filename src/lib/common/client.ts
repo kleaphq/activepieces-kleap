@@ -293,7 +293,7 @@ export function parseJsonInput<T = unknown>(value: unknown, label: string): T | 
 export function requireWhere(value: unknown): JsonObject {
   const where = parseJsonInput<JsonObject>(value, 'Where');
   if (!where || typeof where !== 'object' || Array.isArray(where) || !Object.keys(where).length) {
-    throw new Error('"Where" must be a non-empty JSON object of column equalities, e.g. {"id": 42}. It protects you from touching every row.');
+    throw new Error('Choose a "Match Column" and a "Match Value" (e.g. id = 42). This protects you from changing every row.');
   }
   return where;
 }

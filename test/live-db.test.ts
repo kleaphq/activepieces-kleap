@@ -16,13 +16,13 @@ const log = (label: string, value: unknown) => console.log(`[live-db] ${label}: 
 describe('live: database', () => {
   const insertedIds: unknown[] = [];
   const store = memoryStore();
-  const triggerCtx = makeContext(KEY, { app_id: APP, table: TABLE, order_by: 'created_at', id_column: 'id' }, store);
+  const triggerCtx = makeContext(KEY, { app_id: APP, table: TABLE }, store);
 
   after(async () => {
     // Safety net: remove anything this run inserted, even if an assertion failed midway.
     for (const id of insertedIds) {
       try {
-        await runAction('delete_rows', KEY, { app_id: APP, table: TABLE, where: { id, email: EMAIL } });
+        await runAction('delete_rows', KEY, { app_id: APP, table: TABLE, where_column: 'id', where_value: String(id), where_advanced: { email: EMAIL } });
       } catch {
         /* already deleted */
       }
@@ -44,7 +44,7 @@ describe('live: database', () => {
     await t.onEnable(triggerCtx);
     log('trigger lastItem after enable', store.data.get('lastItem') ?? null);
 
-    const ins = await runAction('insert_rows', KEY, { app_id: APP, table: TABLE, rows: { email: EMAIL } });
+    const ins = await runAction('insert_rows', KEY, { app_id: APP, table: TABLE, values: { email: EMAIL } });
     assert.equal(ins.inserted, 1);
     const row = ins.rows[0];
     insertedIds.push(row.id);
@@ -63,11 +63,11 @@ describe('live: database', () => {
 
   it('find rows (where), update, run SQL, delete', async () => {
     const id = insertedIds[0];
-    const found = await runAction('find_rows', KEY, { app_id: APP, table: TABLE, where: { email: EMAIL }, order_by: 'created_at', order: 'desc', limit: 10 });
+    const found = await runAction('find_rows', KEY, { app_id: APP, table: TABLE, where_column: 'email', where_value: EMAIL, order_by: 'created_at', order: 'desc', limit: 10 });
     assert.ok(found.rows.some((r: any) => String(r.id) === String(id)));
     log('find rows', { count: found.rows.length, has_more: found.has_more, truncated: found.truncated ?? false });
 
-    const upd = await runAction('update_rows', KEY, { app_id: APP, table: TABLE, where: { id, email: EMAIL }, set: { status: 'contacted' } });
+    const upd = await runAction('update_rows', KEY, { app_id: APP, table: TABLE, where_column: 'id', where_value: String(id), where_advanced: { email: EMAIL }, values: { status: 'contacted' } });
     assert.equal(upd.updated, 1);
     assert.equal(upd.rows[0].status, 'contacted');
     log('update', { updated: upd.updated, status: upd.rows[0].status });
@@ -81,12 +81,12 @@ describe('live: database', () => {
       log('unsupported statement', e.message);
       return /^UNSUPPORTED_STATEMENT: /.test(e.message);
     });
-    await assert.rejects(runAction('update_rows', KEY, { app_id: APP, table: TABLE, where: {}, set: { status: 'x' } }), /non-empty/);
+    await assert.rejects(runAction('update_rows', KEY, { app_id: APP, table: TABLE, values: { status: 'x' } }), /Match Column/);
 
-    const del = await runAction('delete_rows', KEY, { app_id: APP, table: TABLE, where: { id, email: EMAIL } });
+    const del = await runAction('delete_rows', KEY, { app_id: APP, table: TABLE, where_column: 'id', where_value: String(id), where_advanced: { email: EMAIL } });
     assert.equal(del.deleted, 1);
     insertedIds.length = 0;
-    const gone = await runAction('find_rows', KEY, { app_id: APP, table: TABLE, where: { email: EMAIL } });
+    const gone = await runAction('find_rows', KEY, { app_id: APP, table: TABLE, where_column: 'email', where_value: EMAIL });
     assert.equal(gone.rows.filter((r: any) => String(r.id) === String(id)).length, 0);
     log('delete', { deleted: del.deleted, remaining_mine: gone.rows.length });
   });

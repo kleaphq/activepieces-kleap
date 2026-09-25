@@ -8,6 +8,7 @@ import {
 import { kleapAuth } from '../auth';
 import { flattenSubmission, JsonObject, kleapRequest, resolveAppId } from '../common/client';
 import { appDropdown, tableDropdown } from '../common/props';
+import { columnDropdown } from '../common/db-props';
 
 type KleapAuthConnection = AppConnectionValueForAuthProperty<typeof kleapAuth>;
 
@@ -159,17 +160,13 @@ export const newDatabaseRow = createTrigger({
   props: {
     app_id: appDropdown(),
     table: tableDropdown(),
-    order_by: Property.ShortText({
-      displayName: 'Sort Column',
-      description: 'Column that grows with new rows, newest first. Defaults to created_at (use id if the table has no created_at).',
-      required: false,
-      defaultValue: 'created_at',
+    order_by: columnDropdown({
+      displayName: 'Sort Column (Optional)',
+      description: 'Column that grows with new rows. Leave empty for created_at (pick id if the table has no created_at).',
     }),
-    id_column: Property.ShortText({
-      displayName: 'ID Column',
-      description: 'Unique column used to deduplicate rows. Defaults to id.',
-      required: false,
-      defaultValue: 'id',
+    id_column: columnDropdown({
+      displayName: 'ID Column (Optional)',
+      description: 'Unique column used to spot new rows. Leave empty for id.',
     }),
   },
   sampleData: {

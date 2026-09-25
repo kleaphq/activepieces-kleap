@@ -1,6 +1,6 @@
 {
   "name": "@kleap/piece-kleap",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Activepieces piece for Kleap: build, edit and publish websites with AI, read leads, analytics and the app database, buy domains.",
   "keywords": [
     "activepieces",
