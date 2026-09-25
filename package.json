@@ -27,7 +27,8 @@
     "test:live": "node --import tsx --test --test-timeout=1800000 test/live.test.ts",
     "metadata": "node scripts/metadata.mjs",
     "export:monorepo": "node scripts/export-to-monorepo.mjs",
-    "test:live-db": "node --import tsx --test --test-timeout=600000 test/live-db.test.ts"
+    "test:live-db": "node --import tsx --test --test-timeout=600000 test/live-db.test.ts",
+    "test:live-forms": "node --import tsx --test --test-timeout=300000 test/live-forms.test.ts"
   },
   "dependencies": {
     "@activepieces/pieces-common": "0.12.5",
