@@ -1,5 +1,5 @@
 {
-  "name": "@kleap/piece-kleap",
+  "name": "activepieces-kleap",
   "version": "0.1.1",
   "description": "Activepieces piece for Kleap: build, edit and publish websites with AI, read leads, analytics and the app database, buy domains.",
   "keywords": [
@@ -41,5 +41,9 @@
     "nock": "^14.0.17",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kleaphq/activepieces-kleap.git"
   }
 }

@@ -130,7 +130,7 @@ npm publish --access restricted   # private package; use --access public to shar
 Install it on your instance:
 
 - **Community edition**: go to **Settings → My Pieces → Install Piece**, choose **npm**, and enter
-  `@kleap/piece-kleap` with its version. The instance needs read access to the registry. For a private package,
+  `activepieces-kleap` with its version. The instance needs read access to the registry. For a private package,
   set the registry token in the environment of the Activepieces container (`.npmrc`/`NPM_CONFIG_*`).
 - **Platform (enterprise)**: go to **Platform Admin → Setup → Pieces → Install Piece**. Either give the npm package
   name, or upload the tarball from `npm pack` in `dist/npm`.
@@ -140,7 +140,7 @@ Activepieces 0.82 or later.
 
 ## Verified on a real self-hosted Activepieces (0.92.0)
 
-`@kleap/piece-kleap@0.1.1` was installed as an archive (`POST /api/v1/pieces`, `packageType=ARCHIVE`). The
+`activepieces-kleap@0.1.1` was installed as an archive (`POST /api/v1/pieces`, `packageType=ARCHIVE`). The
 Kleap connection was created and validated through `POST /api/v1/app-connections` (`SECRET_TEXT`). The app,
 table and column dropdowns and the per-column fields all loaded through `POST /api/v1/pieces/options`. A published
 flow (**New Form Submission** → **Insert Row**) picked up a real visitor lead on its 5-minute poll and inserted
